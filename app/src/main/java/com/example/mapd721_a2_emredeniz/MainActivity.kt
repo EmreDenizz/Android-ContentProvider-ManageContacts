@@ -53,48 +53,6 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun ContactsList(context: ComponentActivity) {
-    // State to track if it's the first time loading
-    var firstTimeLoaded by remember { mutableStateOf(true) }
-    // State to hold the list of contacts
-    var contacts by remember { mutableStateOf(emptyList<Contact>()) }
-
-    // LaunchedEffect to perform data loading
-    LaunchedEffect(firstTimeLoaded) {
-        if (firstTimeLoaded) {
-            // Load contacts when it's the first time
-            contacts = loadContacts(context)
-            firstTimeLoaded = false
-        }
-    }
-
-    // Display the list of contacts or a message if the list is empty
-    if (contacts.isEmpty()) {
-        Text(text = "No contacts available")
-    }
-    else {
-        Column(
-            modifier = Modifier
-                .background(Color(230, 230, 230))
-                .size(350.dp)
-                .fillMaxWidth()
-                .padding(10.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            for (contact in contacts) {
-                ContactItem(contact)
-                ContactItem(contact)
-                ContactItem(contact)
-                ContactItem(contact)
-                ContactItem(contact)
-                ContactItem(contact)
-                ContactItem(contact)
-            }
-        }
-    }
-}
-
-@Composable
 fun ContactItem(contact: Contact) {
     // Display each contact in a row with an icon and text
     Row(
@@ -111,6 +69,20 @@ fun ContactItem(contact: Contact) {
 
 @Composable
 fun MainScreen(context: ComponentActivity) {
+
+    // State to track if it's the first time loading
+    var firstTimeLoaded by remember { mutableStateOf(true) }
+    // State to hold the list of contacts
+    var contacts by remember { mutableStateOf(emptyList<Contact>()) }
+
+    // LaunchedEffect to perform data loading
+    LaunchedEffect(firstTimeLoaded) {
+        if (firstTimeLoaded) {
+            // Load contacts when it's the first time
+            contacts = loadContacts(context)
+            firstTimeLoaded = false
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
 
@@ -146,8 +118,8 @@ fun MainScreen(context: ComponentActivity) {
             Button(
                 onClick = {
                     // Load data from Datastore if exist
-
-//                    Toast.makeText(context, "LOADED", Toast.LENGTH_SHORT).show()
+                    contacts = loadContacts(context)
+                    Toast.makeText(context, "LOADED", Toast.LENGTH_SHORT).show()
                 },
                 colors = ButtonDefaults.buttonColors(Color(235, 186, 150))
             ) {
@@ -162,7 +134,7 @@ fun MainScreen(context: ComponentActivity) {
             Button(
                 onClick = {
                     // Save data to Datastore
-//                    Toast.makeText(context, "SAVED", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "SAVED", Toast.LENGTH_SHORT).show()
                 },
                 colors = ButtonDefaults.buttonColors(Color(34, 210, 9))
             ){
@@ -172,7 +144,6 @@ fun MainScreen(context: ComponentActivity) {
                     color = Color.Black
                 )
             }
-
         }
 
         Spacer(modifier = Modifier.height(30.dp))
@@ -192,7 +163,23 @@ fun MainScreen(context: ComponentActivity) {
                 .border(BorderStroke(1.dp, Color.Black))
                 .background(Color(230, 230, 230))
         ) {
-            ContactsList(context)
+            if (contacts.isEmpty()) {
+                Text(text = "No contacts available")
+            }
+            else {
+                Column(
+                    modifier = Modifier
+                        .background(Color(230, 230, 230))
+                        .size(350.dp)
+                        .fillMaxWidth()
+                        .padding(10.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    for (contact in contacts) {
+                        ContactItem(contact)
+                    }
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(50.dp))
@@ -285,6 +272,6 @@ fun loadContacts(context: ComponentActivity): List<Contact> {
 @Composable
 fun DefaultPreview() {
     MAPD721A2EmreDenizTheme {
-        MainScreen(ComponentActivity())
+        MainScreen(context = ComponentActivity())
     }
 }
