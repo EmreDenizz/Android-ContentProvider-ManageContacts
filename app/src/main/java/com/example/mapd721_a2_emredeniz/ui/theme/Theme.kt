@@ -54,7 +54,7 @@ fun MAPD721A2EmreDenizTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = kotlin.text.Typography,
+        typography = Typography,
         content = content
     )
 }
