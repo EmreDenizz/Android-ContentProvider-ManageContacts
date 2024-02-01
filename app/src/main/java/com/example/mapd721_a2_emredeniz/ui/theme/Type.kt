@@ -1,3 +1,6 @@
+// Emre Deniz (301371047)
+// Assignment 2
+
 package com.example.mapd721_a2_emredeniz.ui.theme
 
 import androidx.compose.material3.Typography
