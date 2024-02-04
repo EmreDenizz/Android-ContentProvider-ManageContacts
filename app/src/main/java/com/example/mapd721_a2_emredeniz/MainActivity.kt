@@ -3,8 +3,15 @@
 
 package com.example.mapd721_a2_emredeniz
 
+import android.Manifest.permission.*
 import android.annotation.SuppressLint
-import android.nfc.Tag
+import android.content.ContentProviderOperation
+import android.content.ContentResolver
+import android.content.ContentUris
+import android.content.ContentValues
+import android.content.ContentValues.TAG
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.provider.ContactsContract
 import android.util.Log
@@ -15,28 +22,24 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.KeyboardType.Companion.Uri
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.example.mapd721_a2_emredeniz.ui.theme.MAPD721A2EmreDenizTheme
-import kotlinx.coroutines.launch
 
+// Main activity
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,13 +56,11 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun ContactItem(contact: Contact) {
-    // Display each contact in a row with an icon and text
+fun ContactUnit(contact: Contact) {
     Row(
         modifier = Modifier
             .fillMaxSize()
-            .padding(5.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(5.dp)
     ) {
         Text(text = contact.displayName)
         Spacer(modifier = Modifier.width(5.dp))
@@ -70,19 +71,23 @@ fun ContactItem(contact: Contact) {
 @Composable
 fun MainScreen(context: ComponentActivity) {
 
-    // State to track if it's the first time loading
-    var firstTimeLoaded by remember { mutableStateOf(true) }
-    // State to hold the list of contacts
+    // Check if loaded before
+    var loadedBefore by remember { mutableStateOf(true) }
+    // State: List of contacts
     var contacts by remember { mutableStateOf(emptyList<Contact>()) }
 
-    // LaunchedEffect to perform data loading
-    LaunchedEffect(firstTimeLoaded) {
-        if (firstTimeLoaded) {
+    // Perform data loading
+    LaunchedEffect(loadedBefore) {
+        if (loadedBefore) {
             // Load contacts when it's the first time
-            contacts = loadContacts(context)
-            firstTimeLoaded = false
+            contacts = getContacts(context)
+            loadedBefore = false
         }
     }
+
+    // Define states for contactName and contactNumber
+    var contactName by remember { mutableStateOf("") }
+    var contactNumber by remember { mutableStateOf("") }
 
     Column(modifier = Modifier.fillMaxSize()) {
 
@@ -90,20 +95,24 @@ fun MainScreen(context: ComponentActivity) {
 
         // Contact Name field
         OutlinedTextField(
-            modifier = Modifier.padding(start = 15.dp, end = 15.dp).fillMaxWidth(),
-            value = "",
-            onValueChange = { },
+            modifier = Modifier
+                .padding(start = 15.dp, end = 15.dp)
+                .fillMaxWidth(),
+            value = contactName,
+            onValueChange = { contactName = it },
             label = { Text(text = "Contact Name", color = Color.Black, fontSize = 14.sp) }
         )
 
         // Contact Number field
         OutlinedTextField(
-            modifier = Modifier.padding(start = 15.dp, end = 15.dp).fillMaxWidth(),
+            modifier = Modifier
+                .padding(start = 15.dp, end = 15.dp)
+                .fillMaxWidth(),
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Phone
             ),
-            value = "",
-            onValueChange = { },
+            value = contactNumber,
+            onValueChange = { contactNumber = it },
             label = { Text(text = "Contact No", color = Color.Black, fontSize = 14.sp) }
         )
 
@@ -112,13 +121,15 @@ fun MainScreen(context: ComponentActivity) {
         // Buttons
         Row(
             horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth().padding(15.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(15.dp)
         ) {
             // Load button
             Button(
                 onClick = {
-                    // Load data from Datastore if exist
-                    contacts = loadContacts(context)
+                    // Get data from Contacts
+                    contacts = getContacts(context)
                     Toast.makeText(context, "LOADED", Toast.LENGTH_SHORT).show()
                 },
                 colors = ButtonDefaults.buttonColors(Color(235, 186, 150))
@@ -133,8 +144,13 @@ fun MainScreen(context: ComponentActivity) {
             // Save button
             Button(
                 onClick = {
-                    // Save data to Datastore
-                    Toast.makeText(context, "SAVED", Toast.LENGTH_SHORT).show()
+                    // Save data to Contacts
+                    if(contactName != "" && contactNumber != ""){
+                        saveContact(context, contactName, contactNumber)
+                    }
+                    else{
+                        Toast.makeText(context, "Fill all the fields.", Toast.LENGTH_SHORT).show()
+                    }
                 },
                 colors = ButtonDefaults.buttonColors(Color(34, 210, 9))
             ){
@@ -164,7 +180,7 @@ fun MainScreen(context: ComponentActivity) {
                 .background(Color(230, 230, 230))
         ) {
             if (contacts.isEmpty()) {
-                Text(text = "No contacts available")
+                Text(text = "No contacts available.")
             }
             else {
                 Column(
@@ -176,7 +192,7 @@ fun MainScreen(context: ComponentActivity) {
                         .verticalScroll(rememberScrollState())
                 ) {
                     for (contact in contacts) {
-                        ContactItem(contact)
+                        ContactUnit(contact)
                     }
                 }
             }
@@ -202,18 +218,54 @@ fun MainScreen(context: ComponentActivity) {
     }
 }
 
-// Data class to represent a contact
+// Save contact function
+@SuppressLint("Range")
+fun saveContact(context: ComponentActivity, name: String, number: String) {
+    // Request the permission for WRITE_CONTACTS
+    if (ContextCompat.checkSelfPermission(context, WRITE_CONTACTS) == PackageManager.PERMISSION_DENIED) {
+        ActivityCompat.requestPermissions(context, arrayOf(WRITE_CONTACTS), 100)
+        Log.d(TAG, "Permission requested")
+    } else {
+        Log.d(TAG, "Permission already granted")
+    }
+
+    // Insert a new raw contact
+    val rawContactUri: Uri = context.contentResolver.insert(ContactsContract.RawContacts.CONTENT_URI, ContentValues())!!
+
+    // Get the raw contactID
+    val rContactId = ContentUris.parseId(rawContactUri)
+
+    // Add contact name
+    val contentValuesName = ContentValues()
+    contentValuesName.put(ContactsContract.Data.RAW_CONTACT_ID, rContactId)
+    contentValuesName.put(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
+    contentValuesName.put(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, name)
+    context.contentResolver.insert(ContactsContract.Data.CONTENT_URI, contentValuesName)
+
+    // Add contact phone number
+    val contentValuesPhone = ContentValues()
+    contentValuesPhone.put(ContactsContract.Data.RAW_CONTACT_ID, rContactId)
+    contentValuesPhone.put(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
+    contentValuesPhone.put(ContactsContract.CommonDataKinds.Phone.TYPE, ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE)
+    contentValuesPhone.put(ContactsContract.CommonDataKinds.Phone.NUMBER, number)
+    context.contentResolver.insert(ContactsContract.Data.CONTENT_URI, contentValuesPhone)
+
+    Toast.makeText(context, "SAVED", Toast.LENGTH_SHORT).show()
+}
+
+// Contact data classes
 data class Contact(val displayName: String, var phoneNumber: String)
 data class ContactIdNames(val contactId: String, var displayName: String)
 data class ContactIdNumbers(val contactId: String, var phoneNumber: String)
 
+// Get Contact function
 @SuppressLint("Range")
-fun loadContacts(context: ComponentActivity): List<Contact> {
+fun getContacts(context: ComponentActivity): List<Contact> {
     val contacts = mutableListOf<Contact>()
     val contactNames = mutableListOf<ContactIdNames>()
     val contactNumbers = mutableListOf<ContactIdNumbers>()
 
-    // Use the content resolver to query contacts
+    // Get contact id and names
     context.contentResolver.query(
         ContactsContract.Contacts.CONTENT_URI,
         arrayOf(ContactsContract.Contacts._ID, ContactsContract.Contacts.DISPLAY_NAME_PRIMARY),
@@ -221,20 +273,21 @@ fun loadContacts(context: ComponentActivity): List<Contact> {
         null,
         null
     )?.use { cursor ->
-        // Check if the cursor has data
         if (cursor.moveToFirst()) {
             do {
-                // Retrieve display name from the cursor and add to the list
                 val contactId =
                     cursor.getString(cursor.getColumnIndex(ContactsContract.Contacts._ID))
                 val displayName =
                     cursor.getString(cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY))
 
-                contactNames.add(ContactIdNames(contactId, displayName))
+                if(displayName != null){
+                    contactNames.add(ContactIdNames(contactId, displayName))
+                }
             } while (cursor.moveToNext())
         }
     }
 
+    // Get contact id and phones
     context.contentResolver.query(
         ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
         arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER, ContactsContract.CommonDataKinds.Phone.CONTACT_ID),
@@ -242,10 +295,8 @@ fun loadContacts(context: ComponentActivity): List<Contact> {
         null,
         null
     )?.use { cursor ->
-        // Check if the cursor has data
         if (cursor.moveToFirst()) {
             do {
-                // Retrieve display name from the cursor and add to the list
                 val contactId =
                     cursor.getString(cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.CONTACT_ID))
                val phoneNumber =
@@ -256,6 +307,7 @@ fun loadContacts(context: ComponentActivity): List<Contact> {
         }
     }
 
+    // Match the contact names and phones
     for (i in 0..contactNames.size-1) {
         var id = contactNames[i].contactId
         for (j in 0..contactNumbers.size-1) {
